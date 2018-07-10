@@ -1,8 +1,5 @@
 import os
 from project.model import Model
-from tensorflow.python.lib.io import file_io
-
-
 
 def set_environ_for_s3():
     """
@@ -20,12 +17,9 @@ def set_environ_for_s3():
 
 if __name__=='__main__':
     set_environ_for_s3()
-    print(os.environ)
+    demo_file="s3://jinlo-data-north-california/demo.tfrecords"
+    # file_name="s3://jinlo-first-backup-bucket/adoc.txt"
 
-    # file_name="s3://jinlo-data-north-california/demo.tfrecords"
-    file_name="s3://jinlo-first-backup-bucket/adoc.txt"
-    print(file_io.stat(file_name))
-
-    # model=Model(['./data/tfrecords/demo.tfrecords'], ['./data/tfrecords/demo.tfrecords'])
-    # model.train()
+    model=Model([demo_file], [demo_file])
+    model.train()
     # model.test(['./data/tfrecords/demo.tfrecords'])

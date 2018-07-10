@@ -2,6 +2,9 @@
 /data
 /lib
 /logs
+/__pycache__
 .floy*
+.ipynb_checkpoints/
+
 pyvenv.cfg
 .idea/

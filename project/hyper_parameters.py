@@ -5,6 +5,12 @@ import tensorflow as tf
 
 FLAGS = tf.app.flags.FLAGS
 
+## remain this line to run in jupyter notebook
+## what this essentially does is that it creates a flag f as jupyter notebook supplies a flag "-f"
+# to pass a name for a JSON file likely for the kernel.
+tf.app.flags.DEFINE_string('f', '', 'kernel')
+
+
 ## The following flags are related to save paths, tensorboard outputs and screen outputs
 
 tf.app.flags.DEFINE_integer('report_freq', 391, '''Steps takes to output errors on the screen
