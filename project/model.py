@@ -16,12 +16,12 @@ class entry():
 
     def __enter__(self):
         self.start=datetime.now()
-        print('【Start】%s'%self.name)
+        print('[Start] %s'%self.name)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         end=datetime.now()
         duration=end-self.start
-        print('【End】%s in %d seconds'%(self.name,duration.seconds))
+        print('[End]%s in %d seconds'%(self.name,duration.seconds))
 
 class Model(object):
     def __init__(self,train_file_names,
