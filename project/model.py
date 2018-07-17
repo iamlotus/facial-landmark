@@ -1,7 +1,7 @@
 import numpy as np
 import os
 from project import *
-from project.prepare_data import decode_from_tfrecords
+from project.prepare_data import decode_from_tfrecords,find_path_from_url
 from project.hyper_parameters import *
 from project.resnet import inference
 from project.face_draw import draw_landmarks
@@ -49,7 +49,7 @@ class Model(object):
             os.makedirs(logs_dir)
             print('create dir %s'%logs_dir)
 
-        if FLAGS.is_use_ckpt is True:
+        if FLAGS.is_use_ckpt is True or FLAGS.phase=='test':
             last_ckpt=tf.train.latest_checkpoint(ckpt_dir)
             with entry('Restore variables from %s'%last_ckpt):
                 if not last_ckpt:
@@ -68,16 +68,16 @@ class Model(object):
 
 
     def prepare_data(self,train_file_names,validate_file_names):
-        self.train_image, self.train_pts, self.train_file=self.extract_data(train_file_names,FLAGS.train_batch_size)
+        self.train_image, self.train_pts, self.train_file=self.extract_data(train_file_names,FLAGS.train_batch_size,shuffle=False)
         self.train_image=tf.cast(self.train_image,tf.float32)
 
-        self.validate_image, self.validate_pts, self.validate_file=self.extract_data(validate_file_names,FLAGS.validation_batch_size)
+        self.validate_image, self.validate_pts, self.validate_file=self.extract_data(validate_file_names,FLAGS.validation_batch_size,shuffle=False)
         self.validate_image = tf.cast(self.validate_image, tf.float32)
 
     @staticmethod
-    def extract_data(file_names, batch_size):
+    def extract_data(file_names, batch_size,shuffle):
         file_name_queue = tf.train.string_input_producer(file_names)
-        image, pts, file = decode_from_tfrecords(file_name_queue,batch_size=batch_size)
+        image, pts, file = decode_from_tfrecords(file_name_queue,batch_size=batch_size,shuffle=shuffle)
         return image,pts,file
 
     def placeholders(self):
@@ -221,32 +221,43 @@ class Model(object):
         coord.request_stop()
         coord.join(threads)
 
-    def test(self,test_file_names=['../data/tfrecords/test.tfrecords']):
+    def test(self,test_file_names=['../data/tfrecords/test.tfrecords'], show_original_pts=False):
         self.build_test_graph()
 
         coord = tf.train.Coordinator()  # 创建一个协调器，管理线程
 
-        test_batch_num=5
-        image, pts, file=self.extract_data(test_file_names,test_batch_num)
+        image, pts, file=self.extract_data(test_file_names,FLAGS.test_batch_size,shuffle=True)
         threads = tf.train.start_queue_runners(coord=coord, sess=self.sess)  # 启动QueueRunner, 此时文件名
 
         images,original_pts,f=self.sess.run([image,pts,file])
         output_pts= self.sess.run(self.test_op,feed_dict={self.test_image:images})
-        for i in range(test_batch_num):
+
+        n=20
+        for i in range(n):
 
             img,output_pt,original_pt,url=images[i],output_pts[i],original_pts[i],f[i]
             # img, opts, url = images[i], ps[i], f[i]
             output_pt=np.reshape(output_pt,[-1,2])
-            original_pt=np.reshape(original_pt,[-1,2] )
+
             url=url.decode()
+
+            # path=find_path_from_url(url)
+            # img = cv2.imread(path)
+
             draw_landmarks(img,output_pt,1)
-            draw_landmarks(img,original_pt,1,color=MARK_COLOR_RED)
+
+
+
+            if FLAGS.show_original_pts_in_test:
+                original_pt = np.reshape(original_pt, [-1, 2])
+                draw_landmarks(img,original_pt,1,color=MARK_COLOR_RED)
 
             # create a named window and move it
             cv2.namedWindow(url)
-            cv2.moveWindow(url, 0, 0)
+            cv2.moveWindow(url, 300, 300)
 
             cv2.imshow(url, img)
+            print('test %d/%d'%(i+1,n))
             cv2.waitKey(0)
             cv2.destroyWindow(url)
         coord.request_stop()

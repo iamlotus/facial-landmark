@@ -25,7 +25,7 @@ moving average shown on tensorboard''')
 tf.app.flags.DEFINE_integer('train_steps', 200000, '''Total steps that you want to train''')
 tf.app.flags.DEFINE_integer('train_batch_size', 64, '''Train batch size''')
 tf.app.flags.DEFINE_integer('validation_batch_size', 128, '''Validation batch size''')
-tf.app.flags.DEFINE_integer('test_batch_size', 10, '''Test batch size''')
+tf.app.flags.DEFINE_integer('test_batch_size', 64, '''Test batch size''')
 
 tf.app.flags.DEFINE_integer('landmark_point_num', 68, '''Landmark point number''')
 
@@ -47,8 +47,12 @@ tf.app.flags.DEFINE_float('weight_decay', 0.0002, '''scale for l2 regularization
 tf.app.flags.DEFINE_integer('padding_size', 2, '''In data augmentation, layers of zero padding on
 each side of the image''')
 
-tf.app.flags.DEFINE_boolean('is_use_ckpt', False, '''Whether to load a checkpoint and continue
+tf.app.flags.DEFINE_boolean('is_use_ckpt', True, '''Whether to load a checkpoint and continue
 training''')
+tf.app.flags.DEFINE_boolean('show_original_pts_in_test', False, '''Whether to show original pts during test''')
+
+
+tf.app.flags.DEFINE_string('phase', 'train', '''train or test''')
 
 logs_dir= 'logs'
 train_dir = logs_dir+'/logs_' + str(FLAGS.num_residual_blocks)+'_blocks' + '/'

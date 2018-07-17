@@ -28,7 +28,7 @@ def crop(img,face,pts,size=128):
 
     return new_img,new_pts
 
-def decode_from_tfrecords(filename_queue, batch_size):
+def decode_from_tfrecords(filename_queue, batch_size, shuffle):
     reader = tf.TFRecordReader()
     _, serialized_example = reader.read(filename_queue)  # 返回文件名和文件
     features = tf.parse_single_example(serialized_example,
@@ -45,11 +45,43 @@ def decode_from_tfrecords(filename_queue, batch_size):
 
     assert batch_size >0
     capacity =  3 * batch_size
-    i, p, f = tf.train.batch([image, pts,file],
+    min_after_dequeue =2*batch_size
+
+
+
+
+    if shuffle:
+        i, p, f = tf.train.shuffle_batch([image, pts,file],
                                           batch_size=batch_size,
                                           num_threads=3,
-                                          capacity=capacity)
+                                          capacity=capacity,
+                                          min_after_dequeue=min_after_dequeue)
+    else:
+        i, p, f = tf.train.batch([image, pts, file],
+                             batch_size=batch_size,
+                             num_threads=3,
+                             capacity=capacity)
+
     return i,p,f
+
+def find_path_from_url(url):
+    url=url.split('_')
+    root='data'
+
+    if url[0]=='300W':
+        path=os.sep.join([root, url[0], '_'.join(url[2:])])
+    elif url[0]=='300VW':
+        path = os.sep.join([root,url[0],url[1],'image',url[2]])
+    elif url[0]=='afw':
+        path = os.sep.join([root, url[0], '_'.join(url[1:])])
+    elif url[0]=='helen':
+        path = os.sep.join([root, url[0],url[1], '_'.join(url[2:])])
+    elif url[0]=='ibug':
+        path = os.sep.join([root, url[0],'_'.join(url[1:])])
+    elif url[0]=='lfpw':
+        path = os.sep.join([root, url[0],url[1],'_'.join(url[2:])])
+
+    return path
 
 if __name__=='__main__':
 
@@ -209,9 +241,9 @@ if __name__=='__main__':
         write_tf_file(validate_path, idx[train_count + test_count:])
 
 
-    def verify_tfrecords(file):
+    def verify_tfrecords(file,shuffle):
         filename_queue = tf.train.string_input_producer([file])
-        image,pts,file=decode_from_tfrecords(filename_queue,batch_size=2)
+        image,pts,file=decode_from_tfrecords(filename_queue,batch_size=2,shuffle=shuffle)
         print('file %s'%file)
 
         with tf.Session() as sess:
