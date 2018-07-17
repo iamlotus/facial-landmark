@@ -102,7 +102,8 @@ class Model(object):
         # mse and the relularization loss
         regu_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         loss = self.loss(logits, self.train_pts)
-        self.train_loss = tf.add_n([loss] + regu_losses)
+        #self.train_loss = tf.add_n([loss] + regu_losses)
+        self.train_loss = loss
 
         # Validation loss
         self.vali_loss = self.loss(vali_logits, self.validate_pts)
