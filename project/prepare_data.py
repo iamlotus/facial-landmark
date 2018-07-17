@@ -44,8 +44,8 @@ def decode_from_tfrecords(filename_queue, batch_size, shuffle):
 
 
     assert batch_size >0
-    capacity =  3 * batch_size
-    min_after_dequeue =2*batch_size
+    capacity =  20 * batch_size
+    min_after_dequeue =10*batch_size
 
 
 
@@ -53,13 +53,13 @@ def decode_from_tfrecords(filename_queue, batch_size, shuffle):
     if shuffle:
         i, p, f = tf.train.shuffle_batch([image, pts,file],
                                           batch_size=batch_size,
-                                          num_threads=3,
+                                          num_threads=8,
                                           capacity=capacity,
                                           min_after_dequeue=min_after_dequeue)
     else:
         i, p, f = tf.train.batch([image, pts, file],
                              batch_size=batch_size,
-                             num_threads=3,
+                             num_threads=8,
                              capacity=capacity)
 
     return i,p,f
