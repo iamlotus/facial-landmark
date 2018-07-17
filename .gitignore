@@ -8,3 +8,4 @@
 *.pyc
 pyvenv.cfg
 .idea/
+test.py
