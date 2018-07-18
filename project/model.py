@@ -1,10 +1,11 @@
 import numpy as np
 import os
 from project import *
-from project.prepare_data import decode_from_tfrecords,find_path_from_url
+from project.prepare_data import decode_from_tfrecords,crop
 from project.hyper_parameters import *
 from project.resnet import inference
-from project.face_draw import draw_landmarks
+from project.face_draw import draw_landmarks,draw_faces
+from project import face_detect as detect
 from datetime import datetime
 from time import time
 from tensorflow.python.client import timeline
@@ -49,7 +50,7 @@ class Model(object):
             os.makedirs(logs_dir)
             print('create dir %s'%logs_dir)
 
-        if FLAGS.is_use_ckpt is True or FLAGS.phase=='test':
+        if FLAGS.is_use_ckpt is True or FLAGS.phase!='train':
             last_ckpt=tf.train.latest_checkpoint(ckpt_dir)
             with entry('Restore variables from %s'%last_ckpt):
                 if not last_ckpt:
@@ -262,4 +263,65 @@ class Model(object):
             cv2.destroyWindow(url)
         coord.request_stop()
         coord.join(threads)
+
+
+    def convert_pts(self,adjusted_face,pts):
+        """convert pts to the coordinate of original image"""
+        f_x, f_y, f_w, f_h = adjusted_face
+
+        new_pts=list(map(lambda pt:(f_x+int(round(f_w*pt[0])),f_y+int(round(f_h*pt[1]))),pts))
+        return new_pts
+
+
+    def test2(self, paths):
+        """
+        test on whole now picture with multiple faces
+        :param paths:
+        :return:
+        """
+        self.build_test_graph()
+
+        zoom_ratio=1.2
+
+        for path in paths:
+            img = cv2.imread(path)
+            if img is None:
+                raise ValueError('can nor read file "%s"'%path)
+            img_size = img.shape[:2]
+            faces = detect.detect_face(img)
+
+            adjusted_face_imgs=[]
+            adjusted_faces=[]
+            for face in faces:
+                adjusted_face, can_adjust = detect.adjust_face(img_size, face, zoom_ratio)
+                if not can_adjust:
+                    adjusted_face = face # use original face
+
+                adjusted_face_img,_=crop(img, adjusted_face, [], size=128)
+                adjusted_face_imgs.append(adjusted_face_img)
+                adjusted_faces.append(adjusted_face)
+
+
+            adjusted_face_imgs=np.reshape(adjusted_face_imgs,(-1,128,128,3))
+            output_pts = self.sess.run(self.test_op, feed_dict={self.test_image: adjusted_face_imgs})
+
+            for i,adjusted_face in enumerate(adjusted_faces):
+                output_pt=output_pts[i]
+                output_pt = np.reshape(output_pt, [-1, 2])
+
+                new_pts=self.convert_pts(adjusted_face,output_pt)
+
+                draw_landmarks(img, new_pts, 2)
+
+            draw_faces(img,adjusted_faces,MARK_COLOR_RED)
+
+            # create a named window and move it
+            cv2.namedWindow(path)
+            cv2.moveWindow(path, 300, 300)
+
+            cv2.imshow(path, img)
+            cv2.waitKey(0)
+            cv2.destroyWindow(path)
+
+
 

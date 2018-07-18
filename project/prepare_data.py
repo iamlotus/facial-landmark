@@ -33,36 +33,37 @@ def decode_from_tfrecords(filename_queue, batch_size, shuffle):
     _, serialized_example = reader.read(filename_queue)  # 返回文件名和文件
     features = tf.parse_single_example(serialized_example,
                                        features={
-                                           'pts': tf.FixedLenFeature([136], tf.float32),
-                                           'img_raw': tf.FixedLenFeature([], tf.string),
-                                           'file': tf.FixedLenFeature([], tf.string),
+                                           'image/filename': tf.FixedLenFeature([], tf.string),
+                                           'image/filename2': tf.FixedLenFeature([], tf.string),
+                                           'image/encoded': tf.FixedLenFeature([], tf.string),
+                                           'label/points': tf.FixedLenFeature([136], tf.float32)
                                        })
-    image_raw = tf.decode_raw(features['img_raw'], tf.uint8)
+
+
+    image_raw = tf.decode_raw(features['image/encoded'], tf.uint8)
     image = tf.reshape(image_raw, [128, 128, 3])
-    pts = features['pts']
-    file = features['file']
+    pts = features['label/points']
+    file = features['image/filename']
+    file2 = features['image/filename2']
 
 
     assert batch_size >0
     capacity =  20 * batch_size
     min_after_dequeue =10*batch_size
 
-
-
-
     if shuffle:
-        i, p, f = tf.train.shuffle_batch([image, pts,file],
+        i, p, f,f2 = tf.train.shuffle_batch([image, pts,file,file2],
                                           batch_size=batch_size,
                                           num_threads=8,
                                           capacity=capacity,
                                           min_after_dequeue=min_after_dequeue)
     else:
-        i, p, f = tf.train.batch([image, pts, file],
+        i, p, f,f2 = tf.train.batch([image, pts, file,file2],
                              batch_size=batch_size,
                              num_threads=8,
                              capacity=capacity)
 
-    return i,p,f
+    return i,p,f,f2
 
 def find_path_from_url(url):
     url=url.split('_')
@@ -115,7 +116,8 @@ if __name__=='__main__':
                         else:
                             raise ValueError('unknown file: %s'%os.path.join(root,filename))
 
-                        pts=list(detect.read_pts(os.path.join(root, filename)))
+                        path=os.path.join(root, filename)
+                        pts=list(detect.read_pts(path))
 
                         def should_reserve(x):
                             return x!='data' and x!='..' and x!='image'
@@ -132,48 +134,57 @@ if __name__=='__main__':
 
                         new_f='_'.join(filter(should_reserve,os.path.join(root,f[0]).split(os.sep)))
 
-                        img_path, pts_path = os.path.join(target_dir, new_f + '.jpg'),os.path.join(target_dir, new_f + '.pts')
+                        meta_path,img_path, pts_path, = os.path.join(target_dir, new_f + '.meta'),os.path.join(target_dir, new_f + '.jpg'),os.path.join(target_dir, new_f + '.pts')
 
-                        if os.path.exists(img_path) and os.path.exists(pts_path):
-                            continue
 
-                        img = cv2.imread(url)
 
-                        # filter face
-                        faces = detect.detect_face(img)
-                        face, pts_num_contained = detect.filter_face(faces, pts)
+                        if not os.path.exists(img_path):
+                            # write img file
+                            img = cv2.imread(url)
 
-                        if pts_num_contained < len(pts) / 2:
-                            # if the detected face does not include most pts, it is invalid
-                            face = None
-                        else:
-                            contains_all = (len(pts) == pts_num_contained)
+                            # filter face
+                            faces = detect.detect_face(img)
+                            face, pts_num_contained = detect.filter_face(faces, pts)
 
-                        img_size = img.shape[:2]
-                        if face is None:
-                            face = detect.inference_face_from_pts(img_size, pts)
-                        else:
-                            zoom_ratio = 1.1
-                            while not contains_all:
-                                face, can_adjust = detect.adjust_face(img_size, face, zoom_ratio)
-                                if not can_adjust:
-                                    face = detect.inference_face_from_pts(img_size, pts)
-                                    break
-                                _, pts_num_contained = detect.filter_face([face], pts)
-                                if len(pts) == pts_num_contained:
-                                    break
-                                zoom_ratio += 0.1
+                            if pts_num_contained < len(pts) / 2:
+                                # if the detected face does not include most pts, it is invalid
+                                face = None
+                            else:
+                                contains_all = (len(pts) == pts_num_contained)
 
-                            # print('zoom ratio=%.3f'%zoom_ratio)
-                            if zoom_ratio > max_zoom_ratio:
-                                print('inc max zoom_ration to %.3f'%zoom_ratio)
-                                max_zoom_ratio = zoom_ratio
+                            img_size = img.shape[:2]
+                            if face is None:
+                                face = detect.inference_face_from_pts(img_size, pts)
+                            else:
+                                zoom_ratio = 1.1
+                                while not contains_all:
+                                    face, can_adjust = detect.adjust_face(img_size, face, zoom_ratio)
+                                    if not can_adjust:
+                                        face = detect.inference_face_from_pts(img_size, pts)
+                                        break
+                                    _, pts_num_contained = detect.filter_face([face], pts)
+                                    if len(pts) == pts_num_contained:
+                                        break
+                                    zoom_ratio += 0.1
 
-                        new_img,new_pts=crop(img,face,pts,size=128)
+                                # print('zoom ratio=%.3f'%zoom_ratio)
+                                if zoom_ratio > max_zoom_ratio:
+                                    print('inc max zoom_ration to %.3f'%zoom_ratio)
+                                    max_zoom_ratio = zoom_ratio
 
-                        cv2.imwrite(img_path, new_img)
-                        with open(pts_path, 'w') as pts_file:
-                            pts_file.write(print_pts(new_pts))
+                            new_img,new_pts=crop(img,face,pts,size=128)
+                            cv2.imwrite(img_path, new_img)
+
+                        if not os.path.exists(img_path):
+                            with open(pts_path, 'w') as pts_file:
+                                pts_file.write(print_pts(new_pts))
+
+                        if not os.path.exists(meta_path):
+                            with open(meta_path, 'w') as meta_file:
+                                content=url
+                                if content.startswith('../'):
+                                    content=content[3:]
+                                meta_file.write(content)
 
                         # draw.draw_landmarks(new_img,new_pts,1)
                         # cv2.imshow(url, new_img)
@@ -185,9 +196,9 @@ if __name__=='__main__':
     def compact_all():
         from_dir = '../data/output'
 
-        train_path='../data/train.tfrecords'
-        test_path = '../data/test.tfrecords'
-        validate_path = '../data/validate.tfrecords'
+        train_path='../data/tfrecords/train'
+        test_path = '../data/tfrecords/test'
+        validate_path = '../data/tfrecords/validate'
         f_list=os.listdir(from_dir)
         pts_files = []
         for filename in f_list:
@@ -199,8 +210,8 @@ if __name__=='__main__':
         idx=list(range(count))
         random.shuffle(idx)
 
-        train_count=round(count*0.8)
-        test_count=round(count*0.1)
+        train_count=round(count*0.9)
+        test_count=round(count*0.05)
 
         def write_tf_file(tf_file_name,index):
             total_length=len(index)
@@ -211,6 +222,7 @@ if __name__=='__main__':
                     file=os.path.splitext(pts_file)[0]
                     jpg = file + '.jpg'
                     png = file + '.png'
+                    meta = file+".meta"
 
                     if os.path.isfile(jpg):
                         url = jpg
@@ -223,28 +235,33 @@ if __name__=='__main__':
                     img = cv2.imread(url)
                     img_raw=img.tostring()
 
+                    with open(meta, 'r') as meta_file:
+                        meta_content=bytes(meta_file.read(),encoding='ascii')
+
                     file_raw=bytes(url.split('/')[-1],encoding='ascii')
 
                     example = tf.train.Example(features=tf.train.Features(
                         feature={
-                            'pts': tf.train.Feature(float_list=tf.train.FloatList(value=pts)),
-                            'img_raw': tf.train.Feature(bytes_list=tf.train.BytesList(value=[img_raw])),
-                            'file':tf.train.Feature(bytes_list=tf.train.BytesList(value=[file_raw]))
+                            'image/filename': tf.train.Feature(bytes_list=tf.train.BytesList(value=[meta_content])),
+                            'image/filename2': tf.train.Feature(bytes_list=tf.train.BytesList(value=[file_raw])),
+                            'image/encoded': tf.train.Feature(bytes_list=tf.train.BytesList(value=[img_raw])),
+                            'label/points': tf.train.Feature(float_list=tf.train.FloatList(value=pts)),
                         }))
                     writer.write(example.SerializeToString())
                     if idx % 500 == 1:
                         print('[{name} {now}/{total}]'.format(name=tf_file_name.split('/')[-1],now=idx,total=total_length))
 
-        # write_tf_file('../data/demo.tfrecords', [1,2,3])
-        write_tf_file(train_path, idx[:train_count])
+        # write_tf_file('../data/tfrecords/demo', [1,2,3])
+
         write_tf_file(test_path, idx[train_count:train_count+test_count])
         write_tf_file(validate_path, idx[train_count + test_count:])
+        write_tf_file(train_path, idx[:train_count])
 
 
     def verify_tfrecords(file,shuffle):
         filename_queue = tf.train.string_input_producer([file])
-        image,pts,file=decode_from_tfrecords(filename_queue,batch_size=2,shuffle=shuffle)
-        print('file %s'%file)
+        image,pts,file,file2=decode_from_tfrecords(filename_queue,batch_size=1,shuffle=shuffle)
+        print('file = %s, file2= %s'%(file,file2))
 
         with tf.Session() as sess:
             init_op=tf.initialize_all_variables()
@@ -253,9 +270,9 @@ if __name__=='__main__':
             threads=tf.train.start_queue_runners(coord=coord) #启动QueueRunner, 此时文件名队列已经进队。
 
 
-            for i in range(2):
-                m,p,f=(sess.run([image,pts,file]))
-                print('[file=%s p.shape=%s m.shape=%s'%(f,p.shape,m.shape))
+            for i in range(4):
+                m,p,f,f2=(sess.run([image,pts,file,file2]))
+                print('[file=%s,file2=%s, p.shape=%s m.shape=%s'%(f,f2,p.shape,m.shape))
 
             coord.request_stop()
             coord.join(threads)
@@ -263,4 +280,4 @@ if __name__=='__main__':
 
     # crop_all()
     # compact_all()
-    verify_tfrecords('../data/demo.tfrecords')
+    verify_tfrecords('../data/tfrecords/demo',shuffle=False)

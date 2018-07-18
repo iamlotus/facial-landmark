@@ -52,7 +52,7 @@ training''')
 tf.app.flags.DEFINE_boolean('show_original_pts_in_test', False, '''Whether to show original pts during test''')
 
 
-tf.app.flags.DEFINE_string('phase', 'train', '''train or test''')
+tf.app.flags.DEFINE_string('phase', 'train', '''train or test or test2''')
 
 logs_dir= 'logs'
 train_dir = logs_dir+'/logs_' + str(FLAGS.num_residual_blocks)+'_blocks' + '/'
