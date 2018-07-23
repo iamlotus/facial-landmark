@@ -1,5 +1,9 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow.contrib import slim
+from tensorflow.contrib.slim.nets import resnet_v2
+from tensorflow.contrib import layers as layers_lib
+
 import os
 
 import cv2
@@ -11,6 +15,7 @@ IMG_CHANNEL = 3
 tf.logging.set_verbosity(tf.logging.INFO)
 
 
+
 FLAGS = tf.app.flags.FLAGS
 
 # data api
@@ -18,8 +23,12 @@ tf.app.flags.DEFINE_integer('prefetch_buffer_size', 256, '''[Data api] prefetch 
 tf.app.flags.DEFINE_integer('num_parallel_calls', 4, '''[Data api] num parallel calls in mapping''')
 # train
 tf.app.flags.DEFINE_integer('train_batch_size', 64, '''[Train] batch size''')
-tf.app.flags.DEFINE_integer('train_num_epocs', 10, '''[Train] epoc numbers''')
-tf.app.flags.DEFINE_integer('train_steps', 20000, '''[Train] train steps''')
+tf.app.flags.DEFINE_integer('train_num_epocs', 100000, '''[Train] epoc numbers''')
+tf.app.flags.DEFINE_integer('train_steps', 2000000, '''[Train] train steps''')
+tf.app.flags.DEFINE_string('optimizer', 'Adam', '''[Train] optimizer must be 'Adam'/'Adagrad'/'Momentum'/'ftrl' ''')
+tf.app.flags.DEFINE_float('learning_rate', 0.0001, '''[Train] learning rate ''')
+tf.app.flags.DEFINE_string('cuda_visible_devices', '3', '''[Train] visible GPU ''')
+
 
 tf.app.flags.DEFINE_string('train_file_path', 'data/tfrecords/train',
                            '''[Train] where to find validate file (in tfrecord format)''')
@@ -28,12 +37,41 @@ tf.app.flags.DEFINE_string('exported_model_dir', 'logs/exported_model',
                            '''[Train] where to save checkpoint and tensorboard output''')
 # other
 tf.app.flags.DEFINE_string('mode', 'train', '''[GLOBAL] which mode to run, must be 'train'/'eval'/'predict' ''')
+tf.app.flags.DEFINE_string('network', 'cnn', '''[GLOBAL] network, must be 'cnn'/'rnn' ''')
 tf.app.flags.DEFINE_string('test_file_path', 'data/tfrecords/test',
                            '''[Test] where to find validate file (in tfrecord format)''')
 tf.app.flags.DEFINE_string('validate_file_path', 'data/tfrecords/modvalidate',
                            '''[Validate] where to find validate file (in tfrecord format)''')
 
-def cnn(features,labels,mode):
+
+model_dir=FLAGS.model_dir+"_"+FLAGS.network
+exported_model_dir=FLAGS.exported_model_dir+"_"+FLAGS.network
+
+def rnn(features,mode):
+    inputs = tf.to_float(features['x'], name="input_to_float")
+
+    if mode == tf.estimator.ModeKeys.TRAIN:
+        is_training=True
+    elif mode ==tf.estimator.ModeKeys.EVAL or mode==tf.estimator.ModeKeys.PREDICT:
+        is_training = False
+    else:
+        raise ValueError('unkown mode %s'%mode)
+
+    reuse=not is_training
+    net, endpoints= resnet_v2.resnet_v2_152(inputs,num_classes=None,is_training=is_training,global_pool=False,reuse=reuse)
+
+    shape=net.get_shape()
+    net=tf.reshape(net,[-1,shape[1]*shape[2]*shape[3]],name='flattern')
+    endpoints['flattern']=net
+
+    with tf.name_scope('fc'):
+        net=tf.contrib.layers.fully_connected(net, 136)
+        endpoints['logits'] = net
+
+    return net
+
+
+def cnn(features,mode):
     layers=[]
 
     """
@@ -204,20 +242,47 @@ def cnn(features,labels,mode):
         name="logits")
     layers.append(logits)
 
-    return layers
+    # return layers
+    return logits
+
+def get_optimizer():
+    learning_rate=FLAGS.learning_rate
+    if FLAGS.optimizer == 'Adam':
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-6)
+    elif FLAGS.optimizer == 'Adagrad':
+        optimizer = tf.train.AdagradOptimizer(learning_rate=learning_rate, initial_accumulator_value=1e-8)
+    elif FLAGS.optimizer == 'Momentum':
+        optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.95)
+    elif FLAGS.optimizer == 'ftrl':
+        optimizer = tf.train.FtrlOptimizer(learning_rate)
+    else:
+        raise ValueError("unkown optimizer %s"%FLAGS.optimizer)
+    return optimizer
+
+def get_network():
+
+    if FLAGS.network == 'cnn':
+        return cnn
+    elif FLAGS.network=='rnn':
+        return rnn
+    else:
+        raise ValueError('unknown network %s'%FLAGS.network)
 
 def model_fn(features, labels, mode):
+    network=get_network()
+    logits=network(features,mode)
 
-    layers=cnn(features,labels,mode)
-    logits=layers[-1]
-
-    # Make prediction for PREDICATION mode.
-    predictions_dict = {
-        "name": features['name'],
-        "logits": logits
-    }
     if mode == tf.estimator.ModeKeys.PREDICT:
-        return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions_dict)
+        # Make prediction for PREDICATION mode.
+        predictions_dict = {
+            "name": features['name'],
+            "logits": logits
+        }
+
+        export_outputs_dict ={
+            tf.saved_model.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY:tf.estimator.export.PredictOutput(logits)
+        }
+        return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions_dict,export_outputs=export_outputs_dict)
 
     # Caculate loss using mean squared error.
     label_tensor = tf.convert_to_tensor(labels, dtype=tf.float32)
@@ -226,7 +291,7 @@ def model_fn(features, labels, mode):
 
     # Configure the train OP for TRAIN mode.
     if mode == tf.estimator.ModeKeys.TRAIN:
-        optimizer = tf.train.AdamOptimizer(learning_rate=0.001,epsilon=1e-6)
+        optimizer = get_optimizer()
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
@@ -343,7 +408,7 @@ def main(unused_argv):
     """MAIN"""
     # Create the Estimator
     estimator = tf.estimator.Estimator(
-        model_fn=model_fn, model_dir=FLAGS.model_dir)
+        model_fn=model_fn, model_dir=model_dir)
 
     # Choose mode between Train, Evaluate and Predict
     mode_dict = {
@@ -363,13 +428,13 @@ def main(unused_argv):
         estimator.train(input_fn=_train_input_fn, steps=FLAGS.train_steps)
 
         # Export result as SavedModel.
-        # estimator.export_savedmodel(FLAGS.exported_model_dir, serving_input_receiver_fn)
+        estimator.export_savedmodel(exported_model_dir, serving_input_receiver_fn)
 
     elif mode == tf.estimator.ModeKeys.EVAL:
         evaluation = estimator.evaluate(input_fn=_eval_input_fn)
         print(evaluation)
 
-    else:
+    elif mode==tf.estimator.ModeKeys.PREDICT:
         predictions = estimator.predict(input_fn=_predict_input_fn)
         for _, result in enumerate(predictions):
             img = cv2.imread("data/output/"+result['name'].decode('ascii'))
@@ -380,8 +445,10 @@ def main(unused_argv):
             # img = cv2.resize(img, (512, 512))
             cv2.imshow('result', img)
             cv2.waitKey()
+    else:
+        raise ValueError('unkown mode %s'%mode)
 
 
 if __name__ == '__main__':
-    os.environ['CUDA_VISIBLE_DEVICES']='0' # use first gpu
+    os.environ['CUDA_VISIBLE_DEVICES']=FLAGS.cuda_visible_devices # set GPU visibility in multiple-GPU environment
     tf.app.run()
