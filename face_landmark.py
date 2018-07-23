@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+import os
 
 import cv2
 
@@ -23,13 +24,13 @@ tf.app.flags.DEFINE_integer('train_steps', 20000, '''[Train] train steps''')
 tf.app.flags.DEFINE_string('train_file_path', 'data/tfrecords/train',
                            '''[Train] where to find validate file (in tfrecord format)''')
 tf.app.flags.DEFINE_string('model_dir', 'logs/train', '''[Train] where to save checkpoint and tensorboard output''')
-tf.app.flags.DEFINE_string('exported_model_dir', '[Train]logs/exported_model',
+tf.app.flags.DEFINE_string('exported_model_dir', 'logs/exported_model',
                            '''[Train] where to save checkpoint and tensorboard output''')
 # other
 tf.app.flags.DEFINE_string('mode', 'train', '''[GLOBAL] which mode to run, must be 'train'/'eval'/'predict' ''')
 tf.app.flags.DEFINE_string('test_file_path', 'data/tfrecords/test',
                            '''[Test] where to find validate file (in tfrecord format)''')
-tf.app.flags.DEFINE_string('validate_file_path', 'data/tfrecords/validate',
+tf.app.flags.DEFINE_string('validate_file_path', 'data/tfrecords/modvalidate',
                            '''[Validate] where to find validate file (in tfrecord format)''')
 
 def cnn(features,labels,mode):
@@ -225,7 +226,7 @@ def model_fn(features, labels, mode):
 
     # Configure the train OP for TRAIN mode.
     if mode == tf.estimator.ModeKeys.TRAIN:
-        optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
+        optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
@@ -237,7 +238,7 @@ def model_fn(features, labels, mode):
 
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {
-        "MSE": tf.metrics.root_mean_squared_error(
+        "RMSE": tf.metrics.root_mean_squared_error(
             labels=label_tensor,
             predictions=logits)}
     return tf.estimator.EstimatorSpec(
@@ -267,7 +268,7 @@ def _parse_function(record):
         image_decoded, [IMG_HEIGHT, IMG_WIDTH, IMG_CHANNEL])
     points = tf.cast(parsed_features['label/points'], tf.float32)
 
-    return {"x": image_reshaped, "name": parsed_features['image/filename']}, points
+    return {"x": image_reshaped, "name": parsed_features['image/filename2']}, points
 
 
 def input_fn(record_file, batch_size, num_epochs=None, shuffle=False, cache=True):
@@ -368,15 +369,17 @@ def main(unused_argv):
     else:
         predictions = estimator.predict(input_fn=_predict_input_fn)
         for _, result in enumerate(predictions):
-            img = cv2.imread(result['name'].decode('ascii'))
+            img = cv2.imread("data/output/"+result['name'].decode('ascii'))
             marks = np.reshape(result['logits'], (-1, 2)) * IMG_WIDTH
             for mark in marks:
                 cv2.circle(img, (int(mark[0]), int(
                     mark[1])), 1, (0, 255, 0), -1, cv2.LINE_AA)
-            img = cv2.resize(img, (512, 512))
+            # img = cv2.resize(img, (512, 512))
             cv2.imshow('result', img)
             cv2.waitKey()
 
 
 if __name__ == '__main__':
+
+    os.environ['CUDA_VISIBLE_DEVICES']='0' # use first gpu only
     tf.app.run()
