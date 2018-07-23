@@ -284,10 +284,12 @@ def input_fn(record_file, batch_size, num_epochs=None, shuffle=False, cache=True
     if batch_size != 1:
         dataset = dataset.batch(batch_size)
         dataset = dataset.prefetch(FLAGS.prefetch_buffer_size)
-    if num_epochs != 1:
-        dataset = dataset.repeat(num_epochs)
+    # cache should be before repeat
     if cache is True:
         dataset=dataset.cache()
+    if num_epochs != 1:
+        dataset = dataset.repeat(num_epochs)
+
 
     # Make dataset iteratable.
     iterator = dataset.make_one_shot_iterator()
