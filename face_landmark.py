@@ -226,7 +226,7 @@ def model_fn(features, labels, mode):
 
     # Configure the train OP for TRAIN mode.
     if mode == tf.estimator.ModeKeys.TRAIN:
-        optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
+        optimizer = tf.train.AdamOptimizer(learning_rate=0.001,epsilon=1e-6)
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
@@ -330,10 +330,13 @@ def _predict_input_fn():
 def serving_input_receiver_fn():
     """An input receiver that expects a serialized tf.Example."""
     image = tf.placeholder(dtype=tf.uint8,
-                           shape=[IMG_HEIGHT, IMG_WIDTH, IMG_CHANNEL],
+                           shape=[None,IMG_HEIGHT, IMG_WIDTH, IMG_CHANNEL],
                            name='input_image_tensor')
-    receiver_tensor = {'image': image}
-    feature = tf.reshape(image, [-1, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNEL])
+    name = tf.placeholder(dtype=tf.string,
+                           name='input_image_name')
+
+    receiver_tensor = {'x': image}
+    feature = {'x':image,'name':name}
     return tf.estimator.export.ServingInputReceiver(feature, receiver_tensor)
 
 def main(unused_argv):
@@ -360,7 +363,7 @@ def main(unused_argv):
         estimator.train(input_fn=_train_input_fn, steps=FLAGS.train_steps)
 
         # Export result as SavedModel.
-        estimator.export_savedmodel(FLAGS.exported_model_dir, serving_input_receiver_fn)
+        # estimator.export_savedmodel(FLAGS.exported_model_dir, serving_input_receiver_fn)
 
     elif mode == tf.estimator.ModeKeys.EVAL:
         evaluation = estimator.evaluate(input_fn=_eval_input_fn)
@@ -380,6 +383,5 @@ def main(unused_argv):
 
 
 if __name__ == '__main__':
-
-    os.environ['CUDA_VISIBLE_DEVICES']='0' # use first gpu only
+    os.environ['CUDA_VISIBLE_DEVICES']='0' # use first gpu
     tf.app.run()
