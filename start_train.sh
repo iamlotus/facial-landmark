@@ -1,1 +1,1 @@
-nohup python3 -u main.py -mode=train face_landmark.py >logs/train.out 2>&1 &
+nohup python3 face_landmark.py -mode=train >logs/train.out 2>&1 &
