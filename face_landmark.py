@@ -23,9 +23,9 @@ tf.app.flags.DEFINE_integer('prefetch_buffer_size', 256, '''[Data api] prefetch 
 tf.app.flags.DEFINE_integer('num_parallel_calls', 4, '''[Data api] num parallel calls in mapping''')
 # train
 tf.app.flags.DEFINE_integer('train_batch_size', 64, '''[Train] batch size''')
-tf.app.flags.DEFINE_integer('train_num_epocs', 100000, '''[Train] epoc numbers''')
-tf.app.flags.DEFINE_integer('train_steps', 2000000, '''[Train] train steps''')
-tf.app.flags.DEFINE_string('optimizer', 'Sgd', '''[Train] optimizer must be 'Adam'/'Adagrad'/'Momentum'/'Sgd'/ftrl' ''')
+tf.app.flags.DEFINE_integer('train_num_epocs', 100, '''[Train] epoc numbers''')
+tf.app.flags.DEFINE_integer('train_steps', 200000, '''[Train] train steps''')
+tf.app.flags.DEFINE_string('optimizer', 'Adam', '''[Train] optimizer must be 'Adam'/'Adagrad'/'Momentum'/'Sgd'/ftrl' ''')
 tf.app.flags.DEFINE_float('learning_rate', 0.0001, '''[Train] learning rate ''')
 tf.app.flags.DEFINE_string('cuda_visible_devices', '3', '''[Train] visible GPU ''')
 
@@ -40,7 +40,7 @@ tf.app.flags.DEFINE_string('mode', 'train', '''[GLOBAL] which mode to run, must 
 tf.app.flags.DEFINE_string('network', 'cnn', '''[GLOBAL] network, must be 'cnn'/'rnn' ''')
 tf.app.flags.DEFINE_string('test_file_path', 'data/tfrecords/test',
                            '''[Test] where to find validate file (in tfrecord format)''')
-tf.app.flags.DEFINE_string('validate_file_path', 'data/tfrecords/modvalidate',
+tf.app.flags.DEFINE_string('validate_file_path', 'data/tfrecords/validate',
                            '''[Validate] where to find validate file (in tfrecord format)''')
 
 
@@ -396,7 +396,7 @@ def _eval_input_fn():
     """Function for evaluating."""
     return input_fn(
         record_file=FLAGS.validate_file_path,
-        batch_size=2,
+        batch_size=64,
         num_epochs=1,
         shuffle=False)
 
@@ -423,9 +423,17 @@ def serving_input_receiver_fn():
 
 def main(unused_argv):
     """MAIN"""
+
+    config = tf.estimator.RunConfig(
+        save_checkpoints_secs=20 * 60,  # Save checkpoints every 20 minutes.
+        save_checkpoints_stpes=10000,  # Save checkpoints every 10000 step.
+        keep_checkpoint_max=10,  # Retain the 10 most recent checkpoints.
+        log_step_count_steps=500, # log every 500 steps
+    )
+
     # Create the Estimator
     estimator = tf.estimator.Estimator(
-        model_fn=model_fn, model_dir=model_dir)
+        model_fn=model_fn, model_dir=model_dir, config=config)
 
     # Choose mode between Train, Evaluate and Predict
     mode_dict = {
