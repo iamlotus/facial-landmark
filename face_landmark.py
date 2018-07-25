@@ -1,8 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib import slim
 from tensorflow.contrib.slim.nets import resnet_v2
-from tensorflow.contrib import layers as layers_lib
 
 import os
 
