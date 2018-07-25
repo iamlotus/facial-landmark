@@ -426,7 +426,7 @@ def main(unused_argv):
 
     config = tf.estimator.RunConfig(
         save_checkpoints_secs=20 * 60,  # Save checkpoints every 20 minutes.
-        save_checkpoints_stpes=10000,  # Save checkpoints every 10000 step.
+        save_checkpoints_steps=10000,  # Save checkpoints every 10000 step.
         keep_checkpoint_max=10,  # Retain the 10 most recent checkpoints.
         log_step_count_steps=500, # log every 500 steps
     )
