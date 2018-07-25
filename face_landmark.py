@@ -25,7 +25,7 @@ tf.app.flags.DEFINE_integer('num_parallel_calls', 4, '''[Data api] num parallel 
 tf.app.flags.DEFINE_integer('train_batch_size', 64, '''[Train] batch size''')
 tf.app.flags.DEFINE_integer('train_num_epocs', 100000, '''[Train] epoc numbers''')
 tf.app.flags.DEFINE_integer('train_steps', 2000000, '''[Train] train steps''')
-tf.app.flags.DEFINE_string('optimizer', 'Adam', '''[Train] optimizer must be 'Adam'/'Adagrad'/'Momentum'/'ftrl' ''')
+tf.app.flags.DEFINE_string('optimizer', 'Sgd', '''[Train] optimizer must be 'Adam'/'Adagrad'/'Momentum'/'Sgd'/ftrl' ''')
 tf.app.flags.DEFINE_float('learning_rate', 0.0001, '''[Train] learning rate ''')
 tf.app.flags.DEFINE_string('cuda_visible_devices', '3', '''[Train] visible GPU ''')
 
@@ -47,26 +47,40 @@ tf.app.flags.DEFINE_string('validate_file_path', 'data/tfrecords/modvalidate',
 model_dir=FLAGS.model_dir+"_"+FLAGS.network
 exported_model_dir=FLAGS.exported_model_dir+"_"+FLAGS.network
 
+
 def rnn(features,mode):
     inputs = tf.to_float(features['x'], name="input_to_float")
 
     if mode == tf.estimator.ModeKeys.TRAIN:
         is_training=True
-    elif mode ==tf.estimator.ModeKeys.EVAL or mode==tf.estimator.ModeKeys.PREDICT:
+    elif mode == tf.estimator.ModeKeys.EVAL or mode == tf.estimator.ModeKeys.PREDICT:
         is_training = False
     else:
-        raise ValueError('unkown mode %s'%mode)
+        raise ValueError('unknown mode %s'%mode)
 
     reuse=not is_training
-    net, endpoints= resnet_v2.resnet_v2_152(inputs,num_classes=None,is_training=is_training,global_pool=False,reuse=reuse)
+    net, _= resnet_v2.resnet_v2_152(inputs,num_classes=None,is_training=is_training,global_pool=True,reuse=reuse)
 
     shape=net.get_shape()
     net=tf.reshape(net,[-1,shape[1]*shape[2]*shape[3]],name='flattern')
-    endpoints['flattern']=net
 
     with tf.name_scope('fc'):
-        net=tf.contrib.layers.fully_connected(net, 136)
-        endpoints['logits'] = net
+        # Dense layer 1, a fully connected layer.
+        net = tf.layers.dense(
+            inputs=net,
+            units=1024,
+            activation=tf.nn.relu,
+            use_bias=True,
+            name='dense1')
+
+        # Dense layer 2, also known as the output layer. Between 0 and 1 (sigmoid)
+        net = tf.layers.dense(
+            inputs=net,
+            units=136,
+            activation=tf.nn.sigmoid,
+            use_bias=True,
+            name="logits")
+
 
     return net
 
@@ -233,11 +247,11 @@ def cnn(features,mode):
         use_bias=True)
     layers.append(dense1)
 
-    # Dense layer 2, also known as the output layer.
+    # Dense layer 2, also known as the output layer.Between 0 and 1 (sigmoid)
     logits = tf.layers.dense(
         inputs=dense1,
         units=136,
-        activation=None,
+        activation=tf.nn.sigmoid,
         use_bias=True,
         name="logits")
     layers.append(logits)
@@ -255,9 +269,12 @@ def get_optimizer():
         optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.95)
     elif FLAGS.optimizer == 'ftrl':
         optimizer = tf.train.FtrlOptimizer(learning_rate)
+    elif FLAGS.optimizer == 'Sgd':
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate)
     else:
-        raise ValueError("unkown optimizer %s"%FLAGS.optimizer)
+        raise ValueError("unknown optimizer %s"%FLAGS.optimizer)
     return optimizer
+
 
 def get_network():
 
@@ -267,6 +284,7 @@ def get_network():
         return rnn
     else:
         raise ValueError('unknown network %s'%FLAGS.network)
+
 
 def model_fn(features, labels, mode):
     network=get_network()
@@ -284,7 +302,7 @@ def model_fn(features, labels, mode):
         }
         return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions_dict,export_outputs=export_outputs_dict)
 
-    # Caculate loss using mean squared error.
+    # Calculate loss using mean squared error.
     label_tensor = tf.convert_to_tensor(labels, dtype=tf.float32)
     loss = tf.losses.mean_squared_error(
         labels=label_tensor, predictions=logits)
@@ -355,7 +373,6 @@ def input_fn(record_file, batch_size, num_epochs=None, shuffle=False, cache=True
         dataset=dataset.cache()
     if num_epochs != 1:
         dataset = dataset.repeat(num_epochs)
-
 
     # Make dataset iteratable.
     iterator = dataset.make_one_shot_iterator()
