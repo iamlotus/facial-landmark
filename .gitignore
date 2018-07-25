@@ -8,4 +8,5 @@
 *.pyc
 pyvenv.cfg
 .idea/
+.trainpid
 test.py
