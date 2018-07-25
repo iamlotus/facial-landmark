@@ -58,8 +58,7 @@ def rnn(features,mode):
     else:
         raise ValueError('unknown mode %s'%mode)
 
-    reuse=not is_training
-    net, _= resnet_v2.resnet_v2_152(inputs,num_classes=None,is_training=is_training,global_pool=True,reuse=reuse)
+    net, _= resnet_v2.resnet_v2_152(inputs,num_classes=None,is_training=is_training,global_pool=True,reuse=tf.AUTO_REUSE)
 
     shape=net.get_shape()
     net=tf.reshape(net,[-1,shape[1]*shape[2]*shape[3]],name='flattern')
