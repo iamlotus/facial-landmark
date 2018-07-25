@@ -22,7 +22,7 @@ tf.app.flags.DEFINE_integer('num_parallel_calls', 4, '''[Data api] num parallel 
 # train
 tf.app.flags.DEFINE_integer('train_batch_size', 64, '''[Train] batch size''')
 tf.app.flags.DEFINE_integer('train_num_epocs', 100, '''[Train] epoc numbers''')
-tf.app.flags.DEFINE_integer('train_steps', 200000, '''[Train] train steps''')
+tf.app.flags.DEFINE_integer('train_steps', 500000, '''[Train] train steps''')
 tf.app.flags.DEFINE_string('optimizer', 'Adam', '''[Train] optimizer must be 'Adam'/'Adagrad'/'Momentum'/'Sgd'/ftrl' ''')
 tf.app.flags.DEFINE_float('learning_rate', 0.0001, '''[Train] learning rate ''')
 tf.app.flags.DEFINE_string('cuda_visible_devices', '3', '''[Train] visible GPU ''')
@@ -402,9 +402,9 @@ def _predict_input_fn():
     """Function for predicting."""
     return input_fn(
         record_file=FLAGS.test_file_path,
-        batch_size=2,
+        batch_size=64,
         num_epochs=1,
-        shuffle=False)
+        shuffle=True)
 
 def serving_input_receiver_fn():
     """An input receiver that expects a serialized tf.Example."""
@@ -424,7 +424,7 @@ def main(unused_argv):
     config = tf.estimator.RunConfig(
         save_checkpoints_secs=20 * 60,  # Save checkpoints every 20 minutes.
         keep_checkpoint_max=10,  # Retain the 10 most recent checkpoints.
-        log_step_count_steps=500, # log every 500 steps
+        log_step_count_steps=100, # log every 500 steps
     )
 
     # Create the Estimator
@@ -467,7 +467,7 @@ def main(unused_argv):
             cv2.imshow('result', img)
             cv2.waitKey()
     else:
-        raise ValueError('unkown mode %s'%mode)
+        raise ValueError('unknown mode %s'%mode)
 
 
 if __name__ == '__main__':
