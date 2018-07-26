@@ -109,6 +109,56 @@ def cnn(features,mode):
 
     inputs = tf.to_float(features['x'], name="input_to_float")
 
+    with slim.arg_scope([slim.conv2d],kernel_size=[3,3],stride=1,padding='SAME',activation_fn=tf.nn.relu), \
+            slim.arg_scope([slim.max_pool2d],kernel_size=[2,2],padding='SAME'):
+
+        with tf.variable_scope("layer1"):
+            net = slim.conv2d(inputs,num_outputs=32)
+            net = slim.max_pool2d(net,stride =2)
+
+        with tf.variable_scope("layer2"):
+            net = slim.conv2d(net,num_outputs=64)
+            net = slim.conv2d(net, num_outputs=64)
+            net = slim.max_pool2d(net,stride =2)
+
+        with tf.variable_scope("layer3"):
+            net = slim.conv2d(net, num_outputs=64)
+            net = slim.conv2d(net, num_outputs=64)
+            net = slim.max_pool2d(net,stride =2)
+
+        with tf.variable_scope("layer4"):
+            net = slim.conv2d(net, num_outputs=128)
+            net = slim.conv2d(net, num_outputs=128)
+            net = slim.max_pool2d(net,stride=2)
+
+        with tf.variable_scope("layer5"):
+            net = slim.conv2d(net, num_outputs=256)
+
+        with tf.variable_scope("layer6"):
+            net =slim.flatten(net)
+            net =slim.fully_connected(net,num_outputs=1024,activation_fn=tf.nn.relu)
+            net = slim.fully_connected(net, num_outputs=136, activation_fn=tf.nn.sigmoid)
+
+        return net
+
+
+def cnn2(features,mode):
+    """
+    cnn Implementation with slim
+    :param features:
+    :param mode:
+    :return:
+    """
+
+    # |== Layer 0: input layer ==|
+    # Input feature x should be of shape (batch_size, image_width, image_height, color_channels).
+    # Image shape should be checked for safety reasons at early stages, and could be removed
+    # before training actually starts.
+    assert features['x'].shape[1:] == (
+        IMG_WIDTH, IMG_HEIGHT, IMG_CHANNEL), "Image size does not match."
+
+    inputs = tf.to_float(features['x'], name="input_to_float")
+
     with slim.arg_scope([slim.conv2d],kernel_size=[3,3],stride=1,padding='VALID',activation_fn=tf.nn.relu), \
             slim.arg_scope([slim.max_pool2d],kernel_size=[2,2],padding='VALID'):
 
@@ -142,7 +192,7 @@ def cnn(features,mode):
         return net
 
 
-def cnn2(features,mode):
+def cnn3(features,mode):
     layers=[]
 
     """
