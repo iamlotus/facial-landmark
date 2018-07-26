@@ -27,6 +27,8 @@ tf.app.flags.DEFINE_integer('train_steps', 500000, '''[Train] train steps''')
 tf.app.flags.DEFINE_string('optimizer', 'Adam', '''[Train] optimizer must be 'Adam'/'Adagrad'/'Momentum'/'Sgd'/ftrl' ''')
 tf.app.flags.DEFINE_float('learning_rate', 0.0001, '''[Train] learning rate ''')
 tf.app.flags.DEFINE_string('cuda_visible_devices', '3', '''[Train] visible GPU ''')
+tf.app.flags.DEFINE_integer('save_checkpoints_secs', 1200, '''Save checkpoint intervals (in seconds)''')
+
 
 
 tf.app.flags.DEFINE_string('train_file_path', 'data/tfrecords/train',
@@ -481,7 +483,7 @@ def main(unused_argv):
     """MAIN"""
 
     config = tf.estimator.RunConfig(
-        save_checkpoints_secs=20 * 60,  # Save checkpoints every 20 minutes.
+        save_checkpoints_secs=FLAGS.save_checkpoints_secs,  # Save checkpoints every 20 minutes.
         keep_checkpoint_max=10,  # Retain the 10 most recent checkpoints.
         log_step_count_steps=100, # log every 500 steps
     )
