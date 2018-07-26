@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.slim.nets import resnet_v2
+from tensorflow.contrib import layers as layers_lib
 
 import os
 
@@ -56,30 +57,38 @@ def rnn(features,mode):
     else:
         raise ValueError('unknown mode %s'%mode)
 
-    net, _= resnet_v2.resnet_v2_152(inputs,num_classes=None,is_training=is_training,global_pool=True,reuse=tf.AUTO_REUSE)
+    net, _= resnet_v2.resnet_v2_101(inputs,num_classes=None,is_training=is_training,global_pool=True,reuse=tf.AUTO_REUSE)
 
-    shape=net.get_shape()
-    net=tf.reshape(net,[-1,shape[1]*shape[2]*shape[3]],name='flattern')
+    # # output layer. Between 0 and 1 (sigmoid)
+    # net = layers_lib.conv2d(
+    #     net,
+    #     136, [1, 1],
+    #     activation_fn=tf.nn.sigmoid,
+    #     normalizer_fn=None,
+    #     scope='fc')
+    #
+    # shape=net.get_shape()
+    # net=tf.reshape(net,[-1,shape[1]*shape[2]*shape[3]],name='logits')
 
-    with tf.name_scope('fc'):
-        # Dense layer 1, a fully connected layer.
-        net = tf.layers.dense(
-            inputs=net,
-            units=1024,
-            activation=tf.nn.relu,
-            use_bias=True,
-            name='dense1')
+    # Flatten tensor into a batch of vectors
+    flatten = tf.layers.flatten(inputs=net)
 
-        # Dense layer 2, also known as the output layer. Between 0 and 1 (sigmoid)
-        net = tf.layers.dense(
-            inputs=net,
-            units=136,
-            activation=tf.nn.sigmoid,
-            use_bias=True,
-            name="logits")
+    # Dense layer 1, a fully connected layer.
+    dense1 = tf.layers.dense(
+        inputs=flatten,
+        units=1024,
+        activation=tf.nn.relu,
+        use_bias=True)
 
+    # Dense layer 2, also known as the output layer.Between 0 and 1 (sigmoid)
+    logits = tf.layers.dense(
+        inputs=dense1,
+        units=136,
+        activation=tf.nn.sigmoid,
+        use_bias=True,
+        name="logits")
 
-    return net
+    return logits
 
 
 def cnn(features,mode):
@@ -288,6 +297,7 @@ def model_fn(features, labels, mode):
     logits=network(features,mode)
 
     if mode == tf.estimator.ModeKeys.PREDICT:
+
         # Make prediction for PREDICATION mode.
         predictions_dict = {
             "name": features['name'],
@@ -318,7 +328,7 @@ def model_fn(features, labels, mode):
 
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {
-        "RMSE": tf.metrics.root_mean_squared_error(
+        "MSE": tf.metrics.mean_squared_error(
             labels=label_tensor,
             predictions=logits)}
     return tf.estimator.EstimatorSpec(
