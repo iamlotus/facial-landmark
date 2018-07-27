@@ -189,9 +189,12 @@ def model_fn(features, labels, mode):
     # Configure the train OP for TRAIN mode.
     if mode == tf.estimator.ModeKeys.TRAIN:
         optimizer = get_optimizer()
-        train_op = optimizer.minimize(
-            loss=loss,
-            global_step=tf.train.get_global_step())
+
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies([tf.group(*update_ops)]):
+            train_op = optimizer.minimize(
+                loss=loss,
+                global_step=tf.train.get_global_step())
         return tf.estimator.EstimatorSpec(
             mode=mode,
             loss=loss,
