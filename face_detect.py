@@ -13,6 +13,7 @@ def read_pts(file_path):
         pts = map(lambda x: (float(x[0]), float(x[1])), [c.rstrip().split(' ') for c in f.readlines()[3:-1]])
         return pts
 
+
 def read_pts_as_float_list(file_path):
     with open(file_path, 'r') as f:
         pts=[]
@@ -20,6 +21,7 @@ def read_pts_as_float_list(file_path):
             pts.append(float(x[0]))
             pts.append(float(x[1]))
         return pts
+
 
 def convertToRGB(img):
     return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -53,18 +55,19 @@ def filter_face(faces,pts):
     c = Counter()
     c.update([id for id, face in enumerate(faces) for pt in pts if pt_in_face(pt,face)])
     if not c:
-        return None,False
+        return None,0
     else:
         target_face=sorted(c.items(), key=lambda n: n[1])[-1]
         target_face_id,num=target_face
         return faces[target_face_id],num
 
 
-def inference_face_from_pts(img_size,pts):
+def inference_face_from_pts(img_size,pts,zoom_ratio):
     """
     inferecnce an squre contains all pts
     :param img_size: tuple, (w,h)
     :param pts: iterable, ((x1,y1),(x2,y2)...(xn,yn))
+    :param zoom_ratio: zoom_ratio
     :return: tuple,(x,y,w,h)
     """
 
@@ -72,10 +75,10 @@ def inference_face_from_pts(img_size,pts):
     min_x, max_x=math.floor(min(xs)), math.ceil(max(xs))
     min_y, max_y = math.floor(min(ys)), math.ceil(max(ys))
     face=(min_x,min_y,math.ceil(max_x-min_x),math.ceil(max_y-min_y))
-    new_face,available=adjust_face(img_size,face,zoom_ratio=1.1)
+    new_face,available=adjust_face(img_size,face,zoom_ratio)
     return new_face
 
-def adjust_face(img_size,face,zoom_ratio=1.1):
+def adjust_face(img_size,face,zoom_ratio):
     """
     return a squre face contains (rectangle) face
     :param img_size: tuple, (w,h)
