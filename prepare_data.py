@@ -1,4 +1,4 @@
-from project import face_detect as detect
+import face_detect as detect
 import os
 import cv2
 import random
@@ -264,6 +264,15 @@ def compact_all(split_spec):
 
 
 if __name__=='__main__':
+
+    # from collections import Counter
+    # c = Counter()
+    # for dir in ['300VW', '300W', 'afw', 'helen', 'ibug', 'lfpw']:
+    #     for _, _, filenames in os.walk(os.path.join('../data', dir)):
+    #         for filename in filenames:
+    #             c.update([filename.split('.')[-1]])
+    # print('data postfix : %s' % c)
+
     def verify_tfrecords(file,shuffle=False):
         filename_queue = tf.train.string_input_producer([file])
         image_value, pts_value, source_filename_value, crop_filename_value, source_face_value =decode_from_tfrecords(filename_queue,batch_size=1,shuffle=shuffle)

@@ -1,14 +1,14 @@
 import numpy as np
-import tensorflow as tf
 from tensorflow.contrib.slim.nets import resnet_v2
 import tensorflow.contrib.slim as slim
+from prepare_data import *
 
 import os
 
 import cv2
 
-IMG_WIDTH = 128
-IMG_HEIGHT = 128
+IMG_WIDTH = IMG_SIZE
+IMG_HEIGHT = IMG_SIZE
 IMG_CHANNEL = 3
 
 tf.logging.set_verbosity(tf.logging.INFO)
@@ -29,18 +29,17 @@ tf.app.flags.DEFINE_float('learning_rate', 0.0001, '''[Train] learning rate ''')
 tf.app.flags.DEFINE_string('cuda_visible_devices', '3', '''[Train] visible GPU ''')
 tf.app.flags.DEFINE_integer('save_checkpoints_secs', 1200, '''Save checkpoint intervals (in seconds)''')
 
-
-
 tf.app.flags.DEFINE_string('train_file_path', 'data/tfrecords/train',
                            '''[Train] where to find validate file (in tfrecord format)''')
 tf.app.flags.DEFINE_string('model_dir', 'logs/train', '''[Train] where to save checkpoint and tensorboard output''')
 tf.app.flags.DEFINE_string('exported_model_dir', 'logs/exported_model',
                            '''[Train] where to save checkpoint and tensorboard output''')
+
+# preidct
+tf.app.flags.DEFINE_string('predict_img_path', 'data/output', '''[predict] where to find img to show' ''')
 # other
-tf.app.flags.DEFINE_string('mode', 'train', '''[GLOBAL] which mode to run, must be 'train'/'eval'/'predict' ''')
+tf.app.flags.DEFINE_string('mode', 'train', '''[GLOBAL] which mode to run, must be 'train'/'eval'/'predict/' ''')
 tf.app.flags.DEFINE_string('network', 'cnn', '''[GLOBAL] network, must be 'cnn'/'rnn' ''')
-tf.app.flags.DEFINE_string('test_file_path', 'data/tfrecords/test',
-                           '''[Test] where to find validate file (in tfrecord format)''')
 tf.app.flags.DEFINE_string('validate_file_path', 'data/tfrecords/validate',
                            '''[Validate] where to find validate file (in tfrecord format)''')
 
@@ -137,6 +136,7 @@ def cnn(features,mode):
 
         return net
 
+
 def get_optimizer():
     learning_rate=FLAGS.learning_rate
     if FLAGS.optimizer == 'Adam':
@@ -173,6 +173,7 @@ def model_fn(features, labels, mode):
         # Make prediction for PREDICATION mode.
         predictions_dict = {
             "name": features['name'],
+            "face":features['face'],
             "logits": logits
         }
 
@@ -213,27 +214,28 @@ def model_fn(features, labels, mode):
 def _parse_function(record):
     """
     Extract data from a `tf.Example` protocol buffer.
+
+    return (features, labels)
     """
-    # Defaults are not specified since both keys are required.
+
     keys_to_features = {
-        'image/filename': tf.FixedLenFeature([], tf.string),
-        'image/filename2': tf.FixedLenFeature([], tf.string),
+        'source_filename': tf.FixedLenFeature([], tf.string),
+        'crop_filename': tf.FixedLenFeature([], tf.string),
         'image/encoded': tf.FixedLenFeature([], tf.string),
+        'image/source_face': tf.FixedLenFeature([4], tf.int64),
         'label/points': tf.FixedLenFeature([136], tf.float32)
     }
 
     parsed_features = tf.parse_single_example(record, keys_to_features)
 
     # Extract features from single example
-    # image_decoded = tf.image.decode_image(parsed_features['image/encoded'])
-
     image_decoded = tf.decode_raw(parsed_features['image/encoded'], tf.uint8)
 
     image_reshaped = tf.reshape(
         image_decoded, [IMG_HEIGHT, IMG_WIDTH, IMG_CHANNEL])
     points = tf.cast(parsed_features['label/points'], tf.float32)
 
-    return {"x": image_reshaped, "name": parsed_features['image/filename2']}, points
+    return {"x": image_reshaped, "name":parsed_features["crop_filename"]}, points
 
 
 def input_fn(record_file, batch_size, num_epochs=None, shuffle=False, cache=True):
@@ -265,6 +267,8 @@ def input_fn(record_file, batch_size, num_epochs=None, shuffle=False, cache=True
     return feature, label
 
 
+
+
 def _train_input_fn():
     """Function for training."""
     return input_fn(
@@ -284,12 +288,37 @@ def _eval_input_fn():
 
 
 def _predict_input_fn():
+    def gen():
+        """
+            generate data from path
+        :return:
+            (features, label)
+        """
+        root=FLAGS.predict_img_path
+
+        for file in os.listdir(root):
+            if file.endswith('.png') or file.endswith('.jpg'):
+
+                url = os.path.join(root,file)
+                img = cv2.imread( url)
+                faces = detect.detect_face(img)
+                for face in faces:
+                    # enlarge face because original face is too small generally
+                    new_face,can_adjust = detect.adjust_face(img.shape[0:2], face, zoom_ratio=ZOOM_RATIO)
+                    if not can_adjust:
+                        continue
+
+                    new_face_img = crop_img(img, new_face)
+                    new_face_img = resize_img(new_face_img, IMG_SIZE)
+                    yield ([file],[new_face_img], [new_face])
+
     """Function for predicting."""
-    return input_fn(
-        record_file=FLAGS.test_file_path,
-        batch_size=64,
-        num_epochs=1,
-        shuffle=True)
+    dataset=tf.data.Dataset.from_generator(generator=gen,output_types=(tf.string,tf.uint8,tf.int32),output_shapes=
+    (tf.TensorShape([None]),tf.TensorShape([None,IMG_SIZE,IMG_SIZE,3]),tf.TensorShape([None,4])))
+    # Make dataset iteratable.
+    name,new_face_img, new_face = dataset.make_one_shot_iterator().get_next()
+    features={'x':new_face_img,'name':name,'face':new_face}
+    return features
 
 def serving_input_receiver_fn():
     """An input receiver that expects a serialized tf.Example."""
@@ -343,10 +372,16 @@ def main(unused_argv):
     elif mode==tf.estimator.ModeKeys.PREDICT:
         predictions = estimator.predict(input_fn=_predict_input_fn)
         for _, result in enumerate(predictions):
-            img = cv2.imread("data/output/"+result['name'].decode('ascii'))
-            marks = np.reshape(result['logits'], (-1, 2)) * IMG_WIDTH
+            img = cv2.imread(os.path.join(FLAGS.predict_img_path,result['name'].decode('ascii')))
+            x,y,w,h = result['face']
+            # face
+            cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 255), 1)
+            #w,h,c =img.shape
+
+            # landmarks
+            marks = np.reshape(result['logits'], (-1, 2)) * (w,h)
             for mark in marks:
-                cv2.circle(img, (int(mark[0]), int(
+                cv2.circle(img, (x+int(mark[0]), y+int(
                     mark[1])), 1, (0, 255, 0), -1, cv2.LINE_AA)
             # img = cv2.resize(img, (512, 512))
             cv2.imshow('result', img)
