@@ -291,19 +291,19 @@ if __name__=='__main__':
             coord.join(threads)
 
 
-    # invalid_count,skipped_count=crop_all(from_root_path='../data'
-    #      , from_dirs=['300VW', '300W', 'afw', 'helen', 'ibug', 'lfpw']
-    #      , output_dir='../data/output')
-    #
-    # print('invalid_count=%d, skipped_count=%d' % (invalid_count,skipped_count))
+    invalid_count,skipped_count=crop_all(from_root_path='../data'
+         , from_dirs=['300VW', '300W', 'afw', 'helen', 'ibug', 'lfpw']
+         , output_dir='../data/output')
 
-    # split_spec=SplitSpec(from_dir = '../data/output',shuffle=True,splitEntries=[SplitEntry(target_path='../data/tfrecords/train',
-    #                                                                            ratio=0.95),
-    #                                                                 SplitEntry(target_path='../data/tfrecords/validate',
-    #                                                                            ratio=0.05)])
-    #
-    # compact_all(split_spec)
+    print('invalid_count=%d, skipped_count=%d' % (invalid_count,skipped_count))
 
-    # verify_tfrecords(file='../data/tfrecords/train')
+    split_spec=SplitSpec(from_dir = '../data/output',shuffle=True,splitEntries=[SplitEntry(target_path='../data/tfrecords/train',
+                                                                               ratio=0.95),
+                                                                    SplitEntry(target_path='../data/tfrecords/validate',
+                                                                               ratio=0.05)])
+
+    compact_all(split_spec)
+
+    verify_tfrecords(file='../data/tfrecords/train')
 
 
