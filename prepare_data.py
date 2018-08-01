@@ -114,7 +114,7 @@ def crop_all(from_root_path, from_dirs, match_names, output_dir):
                     def should_reserve(x):
                         return x != 'data' and x != '..' and x != 'image'
 
-                    if count % 100 == 0:
+                    if count % 10 == 0:
                         print('[%s] %d/%d' % (root, count, total_count))
 
                     count += 1
