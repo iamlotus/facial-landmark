@@ -268,7 +268,7 @@ if __name__=='__main__':
     # from collections import Counter
     # c = Counter()
     # for dir in ['300VW', '300W', 'afw', 'helen', 'ibug', 'lfpw']:
-    #     for _, _, filenames in os.walk(os.path.join('../data', dir)):
+    #     for _, _, filenames in os.walk(os.path.join('data', dir)):
     #         for filename in filenames:
     #             c.update([filename.split('.')[-1]])
     # print('data postfix : %s' % c)
@@ -293,17 +293,17 @@ if __name__=='__main__':
 
     invalid_count,skipped_count=crop_all(from_root_path='../data'
          , from_dirs=['300VW', '300W', 'afw', 'helen', 'ibug', 'lfpw']
-         , output_dir='../data/output')
+         , output_dir='data/output')
 
     print('invalid_count=%d, skipped_count=%d' % (invalid_count,skipped_count))
 
-    split_spec=SplitSpec(from_dir = '../data/output',shuffle=True,splitEntries=[SplitEntry(target_path='../data/tfrecords/train',
+    split_spec=SplitSpec(from_dir = 'data/output',shuffle=True,splitEntries=[SplitEntry(target_path='data/tfrecords/train',
                                                                                ratio=0.95),
-                                                                    SplitEntry(target_path='../data/tfrecords/validate',
+                                                                    SplitEntry(target_path='data/tfrecords/validate',
                                                                                ratio=0.05)])
 
     compact_all(split_spec)
 
-    verify_tfrecords(file='../data/tfrecords/train')
+    verify_tfrecords(file='data/tfrecords/train')
 
 
