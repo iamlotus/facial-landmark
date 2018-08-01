@@ -7,7 +7,7 @@ from collections import namedtuple
 
 
 IMG_SIZE=224
-ZOOM_RATIO=1.3
+ZOOM_RATIO=1.5
 
 def print_pts(pts):
     msg=['version: 1','n_points:  %d'%len(pts),'{']
@@ -78,7 +78,7 @@ def decode_from_tfrecords(filename_queue, batch_size, shuffle):
     return image_value, pts_value, source_filename_value,crop_filename_value,source_face_value
 
 
-def crop_all(from_root_path, from_dirs, output_dir):
+def crop_all(from_root_path, from_dirs, match_names, output_dir):
 
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
@@ -88,14 +88,17 @@ def crop_all(from_root_path, from_dirs, output_dir):
         for root, _, filenames in os.walk(os.path.join(from_root_path, from_dir)):
 
             count = 1
-            invalid_count = 0
-            skipped_count = 0
+            invalid_pts_count = 0
+            inferenced_from_pts_count=0
             total_count = len(filenames) / 2
 
             for filename in filenames:
 
                 if filename.endswith('.pts'):
                     f = filename.split('.')
+                    if not match_names is None and len(match_names)!=0 and not f[0] in match_names:
+                        continue
+
                     jpg = os.path.join(root, f[0] + '.jpg')
                     png = os.path.join(root, f[0] + '.png')
                     if os.path.isfile(jpg):
@@ -114,12 +117,11 @@ def crop_all(from_root_path, from_dirs, output_dir):
                     if count % 100 == 0:
                         print('[%s] %d/%d' % (root, count, total_count))
 
-                    count += 1
+                        count += 1
 
                     if [1 for pt in pts if pt[0] < 0 or pt[1] < 0]:
                         # if exists invalid(negative) pt, skip
-                        print('skip %s because pt is negative' % url)
-                        invalid_count += 1
+                        invalid_pts_count += 1
                         continue
 
                     new_f = '_'.join(filter(should_reserve, os.path.join(root, f[0]).split(os.sep)))
@@ -134,30 +136,34 @@ def crop_all(from_root_path, from_dirs, output_dir):
                         # filter face
                         faces = detect.detect_face(img)
                         if len(faces)==0:
-                            print('skip %s because can not detect any face' % url)
-                            skipped_count += 1
-                            continue
+                            # can not detect face, use face inerenced from pts
+                            inferenced_from_pts_count+=1
+                            face=detect.inference_face_from_pts(img_size=img.shape[:2],pts=pts)
 
-                        face, pts_num_contained = detect.filter_face(faces, pts)
+                        else:
+                            face, pts_num_contained = detect.filter_face(faces, pts)
+                            if pts_num_contained < len(pts) / 2:
+                                # if the detected face does not include most pts, it is invalid, use face inerenced from pts
+                                inferenced_from_pts_count += 1
+                                face = detect.inference_face_from_pts(img_size=img.shape[:2], pts=pts)
 
-                        if pts_num_contained < len(pts) / 2:
-                            # if the detected face does not include most pts, it is invalid, just skip
-                            print('skip %s because detected face does not match pts'%url)
-                            skipped_count+=1
-                            continue
+                        zoom_ratio=1.0
+                        while True:
+                            face, can_adjust = detect.adjust_face(img.shape[0:2], face, zoom_ratio)
 
-                        face, can_adjust = detect.adjust_face(img.shape[0:2], face, ZOOM_RATIO)
+                            if not can_adjust:
+                                # adjusted face is out of boundary. use face inerenced from pts
+                                inferenced_from_pts_count += 1
+                                face = detect.inference_face_from_pts(img_size=img.shape[:2], pts=pts)
+                                break
 
-                        if not can_adjust:
-                            print('skip %s because zoom out of boundary' % url)
-                            skipped_count += 1
-                            continue
-
-                        _, pts_num_contained = detect.filter_face([face], pts)
-                        if len(pts) != pts_num_contained:
-                            print('skip %s because zoom result is too small to fit all pts' % url)
-                            skipped_count += 1
-                            continue
+                            _, pts_num_contained = detect.filter_face([face], pts)
+                            if len(pts) != pts_num_contained:
+                                # some pts is still out of current face, enlarge face
+                                zoom_ratio += 0.1
+                            else:
+                                #current face contains all pts, use it
+                                break
 
                         new_img, new_pts = crop(img, face, pts, size=IMG_SIZE)
 
@@ -177,7 +183,7 @@ def crop_all(from_root_path, from_dirs, output_dir):
 
                         # then write img, thus if img_path does not exists, it is guaranteed to generate pts file
                         cv2.imwrite(img_path, new_img)                  
-    return invalid_count,skipped_count
+    return invalid_pts_count,inferenced_from_pts_count,total_count
 
 
 SplitEntry=namedtuple('SplitEntry',['target_path','ratio'])
@@ -219,7 +225,7 @@ def write_tf_file(tf_file_name,url_files, index):
             if idx>=500 and idx % 500 == 0:
                 print('[{name} {now}/{total}]'.format(name=tf_file_name.split('/')[-1], now=idx, total=total_length))
     # end
-    print('[{name} {now}/{total}]'.format(name=tf_file_name.split('/')[-1], now=idx+1, total=total_length))
+    print('[{name} {total}/{total}]'.format(name=tf_file_name.split('/')[-1], total=total_length))
 
 
 def compact_all(split_spec):
@@ -291,11 +297,13 @@ if __name__=='__main__':
             coord.join(threads)
 
 
-    invalid_count,skipped_count=crop_all(from_root_path='../data'
+    invalid_count,inferenced_from_pts_count,total_count=crop_all(from_root_path='data'
          , from_dirs=['300VW', '300W', 'afw', 'helen', 'ibug', 'lfpw']
+         # , from_dirs = ['ibug']
+         , match_names =[]
          , output_dir='data/output')
 
-    print('invalid_count=%d, skipped_count=%d' % (invalid_count,skipped_count))
+    print('total_count=%d, invalid_count=%d, inferenced_from_pts_count=%d' % (total_count,invalid_count,inferenced_from_pts_count))
 
     split_spec=SplitSpec(from_dir = 'data/output',shuffle=True,splitEntries=[SplitEntry(target_path='data/tfrecords/train',
                                                                                ratio=0.95),

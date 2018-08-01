@@ -235,7 +235,7 @@ def _parse_function(record):
         image_decoded, [IMG_HEIGHT, IMG_WIDTH, IMG_CHANNEL])
     points = tf.cast(parsed_features['label/points'], tf.float32)
 
-    return {"x": image_reshaped, "name":parsed_features["crop_filename"]}, points
+    return {"x": image_reshaped, "name":parsed_features["crop_filename"],"face":parsed_features["image/source_face"]}, points
 
 
 def input_fn(record_file, batch_size, num_epochs=None, shuffle=False, cache=True):
@@ -327,9 +327,12 @@ def serving_input_receiver_fn():
                            name='input_image_tensor')
     name = tf.placeholder(dtype=tf.string,
                            name='input_image_name')
+    face = tf.placeholder(dtype=tf.uint8,
+                           shape=[None,4],
+                           name='input_image_face')
 
     receiver_tensor = {'x': image}
-    feature = {'x':image,'name':name}
+    feature = {'x':image,'name':name,'face':face}
     return tf.estimator.export.ServingInputReceiver(feature, receiver_tensor)
 
 def main(unused_argv):
@@ -376,7 +379,7 @@ def main(unused_argv):
             x,y,w,h = result['face']
             # face
             cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 255), 1)
-            #w,h,c =img.shape
+            # w,h,c =img.shape
 
             # landmarks
             marks = np.reshape(result['logits'], (-1, 2)) * (w,h)

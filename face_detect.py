@@ -2,6 +2,7 @@ import cv2
 from collections import Counter
 import math
 import numpy as np
+import face_recognition
 
 # relative path is unacceptable
 _haar_face_cascade = cv2.CascadeClassifier('/usr/local/Cellar/python/3.6.4_4/Frameworks/Python.framework/'
@@ -10,7 +11,7 @@ _haar_face_cascade = cv2.CascadeClassifier('/usr/local/Cellar/python/3.6.4_4/Fra
 
 def read_pts(file_path):
     with open(file_path, 'r') as f:
-        pts = map(lambda x: (float(x[0]), float(x[1])), [c.rstrip().split(' ') for c in f.readlines()[3:-1]])
+        pts = list(map(lambda x: (float(x[0]), float(x[1])), [c.rstrip().split(' ') for c in f.readlines()[3:-1]]))
         return pts
 
 
@@ -28,7 +29,10 @@ def convertToRGB(img):
 
 
 def detect_face(img,scaleFactor=1.1):
-    faces = _haar_face_cascade.detectMultiScale(img, scaleFactor=scaleFactor, minNeighbors=5);
+    faces = face_recognition.face_locations(img)
+    # conv (top, right, bottom, left) to (x,y,w,h),eg: (left,top,right-left,bottom-top)
+    faces = [(face[3],face[0],face[1]-face[3],face[2]-face[0]) for face in faces]
+    # faces = _haar_face_cascade.detectMultiScale(img, scaleFactor=scaleFactor, minNeighbors=5);
     return faces
 
 def pt_in_face(pt,face):
@@ -62,9 +66,9 @@ def filter_face(faces,pts):
         return faces[target_face_id],num
 
 
-def inference_face_from_pts(img_size,pts,zoom_ratio):
+def inference_face_from_pts(img_size,pts,zoom_ratio=1.05):
     """
-    inferecnce an squre contains all pts
+    inferecnce an square contains all pts
     :param img_size: tuple, (w,h)
     :param pts: iterable, ((x1,y1),(x2,y2)...(xn,yn))
     :param zoom_ratio: zoom_ratio
@@ -121,5 +125,41 @@ def adjust_face(img_size,face,zoom_ratio):
         return (new_x, new_y, size, size),True
     else:
         return (x,y,w,h),False
+
+
+if __name__ == '__main__':
+
+
+    # img_name='data/ibug/image_010_1.jpg'
+    # pts_name= img_name.split('.')[0]+'.pts'
+    # img=face_recognition.load_image_file(img_name)
+    # faces_locations=face_recognition.face_locations(img)
+    # print(faces_locations)
+
+    import cv2
+    import os
+    img_name='data/ibug/image_050_01.jpg'
+    pts_name= img_name.split('.')[0]+'.pts'
+
+    img = cv2.imread(img_name)
+
+    faces =detect_face(img)
+
+
+    if (os.path.exists(pts_name)):
+        pts =read_pts(pts_name)
+        marks = np.reshape(pts, (-1, 2))
+        for mark in marks:
+            cv2.circle(img, (int(mark[0]), int(
+                mark[1])), 1, (0, 255, 0), -1, cv2.LINE_AA)
+
+    for face in faces:
+        # face, can_adjust = adjust_face(img.shape[0:2], face, 1.5)
+
+        x, y, w, h = face
+        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 255), 1)
+
+    cv2.imshow('result', img)
+    cv2.waitKey()
 
 
