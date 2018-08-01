@@ -117,7 +117,7 @@ def crop_all(from_root_path, from_dirs, match_names, output_dir):
                     if count % 100 == 0:
                         print('[%s] %d/%d' % (root, count, total_count))
 
-                        count += 1
+                    count += 1
 
                     if [1 for pt in pts if pt[0] < 0 or pt[1] < 0]:
                         # if exists invalid(negative) pt, skip
