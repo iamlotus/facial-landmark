@@ -2,6 +2,7 @@ import numpy as np
 from tensorflow.contrib.slim.nets import resnet_v2
 import tensorflow.contrib.slim as slim
 from prepare_data import *
+import math
 
 import os
 
@@ -10,6 +11,7 @@ import cv2
 IMG_WIDTH = IMG_SIZE
 IMG_HEIGHT = IMG_SIZE
 IMG_CHANNEL = 3
+
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -26,6 +28,7 @@ tf.app.flags.DEFINE_integer('train_num_epocs', 100, '''[Train] epoc numbers''')
 tf.app.flags.DEFINE_integer('train_steps', 500000, '''[Train] train steps''')
 tf.app.flags.DEFINE_string('optimizer', 'Adam', '''[Train] optimizer must be 'Adam'/'Adagrad'/'Momentum'/'Sgd'/ftrl' ''')
 tf.app.flags.DEFINE_float('learning_rate', 0.0001, '''[Train] learning rate ''')
+tf.app.flags.DEFINE_float('loss_ratio', 0.001, '''[Train] L2 loss ration ''')
 tf.app.flags.DEFINE_string('cuda_visible_devices', '3', '''[Train] visible GPU ''')
 tf.app.flags.DEFINE_integer('save_checkpoints_secs', 1200, '''Save checkpoint intervals (in seconds)''')
 
@@ -184,8 +187,16 @@ def model_fn(features, labels, mode):
 
     # Calculate loss using mean squared error.
     label_tensor = tf.convert_to_tensor(labels, dtype=tf.float32)
-    loss = tf.losses.mean_squared_error(
+
+    vars=tf.trainable_variables()
+
+    lossL2=tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables() if 'bias' not in v.name]) *FLAGS.loss_ratio
+    print([v.name for v in vars if 'bias' not in v.name])
+
+    lossMSE = tf.losses.mean_squared_error(
         labels=label_tensor, predictions=logits)
+
+    loss= lossMSE+lossL2
 
     # Configure the train OP for TRAIN mode.
     if mode == tf.estimator.ModeKeys.TRAIN:
@@ -296,8 +307,10 @@ def _predict_input_fn():
         """
         root=FLAGS.predict_img_path
 
-        for file in os.listdir(root):
-            if file.endswith('.png') or file.endswith('.jpg'):
+        files=os.listdir(root)
+        files.sort()
+        for file in files:
+            if file.endswith('.png') or file.endswith('.jpg')or file.endswith('.jpeg'):
 
                 url = os.path.join(root,file)
                 img = cv2.imread( url)
@@ -375,20 +388,29 @@ def main(unused_argv):
     elif mode==tf.estimator.ModeKeys.PREDICT:
         predictions = estimator.predict(input_fn=_predict_input_fn)
         for _, result in enumerate(predictions):
-            img = cv2.imread(os.path.join(FLAGS.predict_img_path,result['name'].decode('ascii')))
+            url=os.path.join(FLAGS.predict_img_path,result['name'].decode('ascii'))
+            img = cv2.imread(url)
             x,y,w,h = result['face']
             # face
-            cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 255), 1)
-            # w,h,c =img.shape
+
+            i_w,i_h,_ =img.shape
+            thickness= math.ceil((i_w + i_h)/(2*500))
+            cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 255), thickness)
+
 
             # landmarks
             marks = np.reshape(result['logits'], (-1, 2)) * (w,h)
             for mark in marks:
                 cv2.circle(img, (x+int(mark[0]), y+int(
-                    mark[1])), 1, (0, 255, 0), -1, cv2.LINE_AA)
-            # img = cv2.resize(img, (512, 512))
-            cv2.imshow('result', img)
+                    mark[1])), thickness, (0, 255, 0), -1, cv2.LINE_AA)
+
+            if i_w >1024 or i_h >1024:
+                img = cv2.resize(img, (512, 512))
+
+            name="[%s]%s"%(FLAGS.network,url)
+            cv2.imshow(name, img)
             cv2.waitKey()
+            cv2.destroyWindow(name)
     else:
         raise ValueError('unknown mode %s'%mode)
 
