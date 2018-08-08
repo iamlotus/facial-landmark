@@ -28,7 +28,7 @@ tf.app.flags.DEFINE_integer('train_num_epocs', 100, '''[Train] epoc numbers''')
 tf.app.flags.DEFINE_integer('train_steps', 500000, '''[Train] train steps''')
 tf.app.flags.DEFINE_string('optimizer', 'Adam', '''[Train] optimizer must be 'Adam'/'Adagrad'/'Momentum'/'Sgd'/ftrl' ''')
 tf.app.flags.DEFINE_float('learning_rate', 0.0001, '''[Train] learning rate ''')
-tf.app.flags.DEFINE_float('loss_ratio', 0.001, '''[Train] L2 loss ration ''')
+tf.app.flags.DEFINE_float('loss_ratio', 0.0001, '''[Train] L2 loss ration ''')
 tf.app.flags.DEFINE_string('cuda_visible_devices', '3', '''[Train] visible GPU ''')
 tf.app.flags.DEFINE_integer('save_checkpoints_secs', 1200, '''Save checkpoint intervals (in seconds)''')
 
